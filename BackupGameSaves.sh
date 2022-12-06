@@ -62,9 +62,8 @@
 ## Check to see if Backup location is specified. if not use current Dir to make a folder. 
      if [ -z "$DirBackup" ] ; then
         cd "$OrrScriptDir"
-        printf "\nBackup Location not specified. Using Script location:\n"
-        pwd
-        DirBackup=$(pwd)
+        DirBackup="$(pwd)/$(whoami)/"
+        printf "\nBackup Location not specified. Using Script location:\n$DirBackup"
         DirGinfo="$DirBackup/Ginfo"
         LogFile="$DirBackup/SteamBack.Log"
      fi
@@ -100,13 +99,13 @@ printf "\nHere We Go~\n\n"
         printf "Log file created on $FileDate\n" > "$LogFile"
 
         ## Get list of log files from DirGinfo
-        AryLogs=$(ls "$DirBackup"/SteamBack.Log*)
+        cd $DirBackup
+        shopt -s nullglob
+        AryLogs=(SteamBack.Log*)
+        shopt -u nullglob
 
-        ## get true count of Array entries
-        for Log in ${AryLogs[@]}; do
-            OrrCount=$[OrrCount + 1] 
-        done
-        ## set Count for loop
+        ## set Count for loop(minus one to account for 0)
+        OrrCount=${#AryLogs[@]}
         Count=$[OrrCount - 1]
         ## Loop to rename log files starting from highest number and moving backward
         for Log in ${AryLogs[@]}; do
@@ -145,6 +144,7 @@ printf "\nHere We Go~\n\n"
             fi
         done
     fi
+
 ## Auto Detect Steam Info
     ## Checking for Steam install location
     if [ -z "$SteamDir" ]; then 
@@ -161,7 +161,8 @@ printf "\nHere We Go~\n\n"
         ## Users always have option to manually set userdata folder in script.
         if [ -z "$SteamDir" ]; then 
             printf "\nCould not find Steam in usual places." |& tee -a "$LogFile"
-            printf "\nWould you like you try a search?\nthis could take a very long time if you have a lot of storage.\n"
+            printf "\nWould you like you try a search?\nthis could take a very long time if you have a lot of storage."
+            printf "\nIt is recomended that you set location manually in script instead\n\n"
             read -p "Perform search? " -n 1 -r
             printf "\n"
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -186,13 +187,15 @@ printf "\nHere We Go~\n\n"
         fi
     fi
     ## Checking for Steam ID, Searches for 4 numeric digits followed by anything. This should get any UIDs that are four digits or longer while ignoring the non-UID items in the location.
-    ## Does not account for multiple steam IDs.
+    ## Does not account for multiple steam IDs. In fact it should outright break if there is more than one steam account on the system.
         if [ -z $SteamUID ]; then
             printf "\n"
             printf "\nTrying to find Steam ID." |& tee -a "$LogFile"
             printf " \n(this might fail if your Steam ID is smaller than 4 digits)\n"
             cd "$SteamDir"
-            SteamUID=$(ls -d -- [0-9][0-9][0-9][0-9]*)
+            shopt -s nullglob
+            SteamUID=([0-9][0-9][0-9][0-9]*)
+            shopt -u nullglob
             printf "\nHere's what I found: $SteamUID" |& tee -a "$LogFile"
             printf "\nTrying it..."
             DirSaves="$SteamDir/$SteamUID"
@@ -204,6 +207,8 @@ printf "\nHere We Go~\n\n"
          elif [ -d "$SteamDir" ] && [ ! -d "$DirSaves" ]; then
             printf "\nSomething went wrong."
             printf "\nError ID: Wierd-AutoUID-1" |& tee -a "$LogFile"
+            printf "\nSteamDir: $SteamDir\nSteamUID: $SteamUID\nDirSaves: $DirSaves"
+            exit 1
          else
             printf "\nIt didn't work, manually set SteamUID in Script."
             exit 1
@@ -216,15 +221,19 @@ printf "\nHere We Go~\n\n"
         if [ ! -d "$SteamDir" ]; then
             printf "\nErrorID: D-001\n" |& tee -a "$LogFile"
             printf "\nThis error is typically caused by a non-standard Steam installation location. \nCheck that the path to your steam userdata folder is the same path in the script's SteamDir variable."
+            exit 1
          else
          ## if SteamDir exists, but invalid Steam ID is detected, check to see if it was manually set. Different Errors for each state. 
          ## Script should not get this far if using AutoDetect UID
             if [ $AutoIDBool -lt 1 ]; then
                 printf "\nErrorID: D-002\n" |& tee -a "$LogFile"
                 printf "\nThis error is typically caused by a wrong Steam UID. Your UID should match the folder in your Steam's userdata folder. \nCheck to make sure the SteamUID variable is set correctly."
+                exit 1
              else
                 printf "\nErrorID: D-003\n" |& tee -a "$LogFile"
                 printf "\nAutodetectUID as critically failed. Manually set SteamUID in script."
+                printf "\nSteamDir: $SteamDir\nSteamUID: $SteamUID\nDirSaves: $DirSaves"
+                exit 1
             fi
         fi
     fi
